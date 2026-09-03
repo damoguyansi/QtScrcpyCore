@@ -62,6 +62,7 @@ public:
         bool vdSystemDecorations = true;
         QString displayImePolicy = "";
         bool keepActive = false;
+        bool clipboardAutosync = true;
         bool control = true;           // 安卓端是否接收键鼠控制
         qint32 scid = -1;             // 随机数，作为localsocket名字后缀，方便同时连接同一个设备多次
     };

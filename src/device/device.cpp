@@ -212,11 +212,7 @@ void Device::cameraZoomOut()
 
 bool Device::isReversePort(quint16 port)
 {
-    if (m_server && m_server->isReverse() && port == m_server->getParams().localPort) {
-        return true;
-    }
-
-    return false;
+    return m_params.useReverse && port == m_params.localPort;
 }
 
 void Device::initSignals()
@@ -428,6 +424,7 @@ bool Device::connectDevice()
         params.vdSystemDecorations = m_params.vdSystemDecorations;
         params.displayImePolicy = m_params.displayImePolicy;
         params.keepActive = m_params.keepActive;
+        params.clipboardAutosync = m_params.clipboardAutosync;
         params.control = true;
         m_server->start(params);
     });

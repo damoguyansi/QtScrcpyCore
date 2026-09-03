@@ -218,6 +218,9 @@ bool Server::execute()
         args << QString("video_encoder=%1").arg(m_params.codecName);
     }
     args << "audio=false";
+    if (!m_params.clipboardAutosync) {
+        args << "clipboard_autosync=false";
+    }
     // 服务端默认-1，可不传
     if (-1 != m_params.scid) {
         args << QString("scid=%1").arg(m_params.scid, 8, 16, QChar('0'));
