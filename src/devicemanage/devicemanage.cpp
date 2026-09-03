@@ -70,11 +70,16 @@ bool DeviceManage::disconnectDevice(const QString &serial)
 {
     bool ret = false;
     if (!serial.isEmpty() && m_devices.contains(serial)) {
-        auto it = m_devices.find(serial);
-        if (it->data()) {
-            delete it->data();
+        IDevice *device = m_devices.value(serial).data();
+        if (device) {
+            delete device;
             ret = true;
         }
+        // Device only emits deviceDisconnected (which removes the entry via
+        // onDeviceDisconnected) once the server had started successfully. A
+        // session torn down while still connecting leaves a dangling key here,
+        // and connectDevice() then rejects that serial until the process exits.
+        m_devices.remove(serial);
     }
     return ret;
 }
