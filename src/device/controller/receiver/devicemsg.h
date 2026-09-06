@@ -38,7 +38,7 @@ private:
                 char *text = Q_NULLPTR;
             } clipboardMsg;
         };
-        DeviceMsgData() {}
+        DeviceMsgData() { clipboardMsg.text = Q_NULLPTR; }
         ~DeviceMsgData() {}
     };
 

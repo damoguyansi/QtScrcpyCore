@@ -32,7 +32,6 @@ static void avLogCallback(void *avcl, int level, const char *fmt, va_list vl)
     case AV_LOG_PANIC:
     case AV_LOG_FATAL:
         qFatal("%s", localFmt.toUtf8().data());
-        break;
     case AV_LOG_ERROR:
         qCritical() << localFmt.toUtf8();
         break;
@@ -112,6 +111,7 @@ bool Demuxer::startDecode()
 
 void Demuxer::stopDecode()
 {
+    requestInterruption();
     wait();
 }
 

@@ -1,4 +1,5 @@
 #include <QDebug>
+#include <QMutexLocker>
 
 #include "compat.h"
 #include "decoder.h"
@@ -21,6 +22,7 @@ Decoder::~Decoder() {
 
 bool Decoder::open()
 {
+    QMutexLocker locker(&m_codecMutex);
     // codec
     const AVCodec* codec = avcodec_find_decoder(AV_CODEC_ID_H264);
     if (!codec) {
@@ -36,6 +38,7 @@ bool Decoder::open()
     }
     if (avcodec_open2(m_codecCtx, codec, NULL) < 0) {
         qCritical("Could not open H.264 codec");
+        avcodec_free_context(&m_codecCtx);
         return false;
     }
     m_isCodecCtxOpen = true;
@@ -48,6 +51,7 @@ void Decoder::close()
         m_vb->interrupt();
     }
 
+    QMutexLocker locker(&m_codecMutex);
     if (!m_codecCtx) {
         return;
     }
@@ -55,11 +59,13 @@ void Decoder::close()
         avcodec_close(m_codecCtx);
     }
     avcodec_free_context(&m_codecCtx);
+    m_isCodecCtxOpen = false;
 }
 
 void Decoder::onVideoSessionChanged(const QSize &size)
 {
     Q_UNUSED(size);
+    QMutexLocker locker(&m_codecMutex);
     if (m_codecCtx) {
         avcodec_flush_buffers(m_codecCtx);
     }
@@ -74,6 +80,7 @@ void Decoder::setRenderExpiredFrames(bool enabled)
 
 bool Decoder::push(const AVPacket *packet)
 {
+    QMutexLocker locker(&m_codecMutex);
     if (!m_codecCtx || !m_vb) {
         return false;
     }

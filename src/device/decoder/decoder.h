@@ -1,6 +1,7 @@
 #ifndef DECODER_H
 #define DECODER_H
 #include <QObject>
+#include <QMutex>
 
 extern "C"
 {
@@ -39,6 +40,7 @@ private:
     VideoBuffer *m_vb = Q_NULLPTR;
     AVCodecContext *m_codecCtx = Q_NULLPTR;
     bool m_isCodecCtxOpen = false;
+    QMutex m_codecMutex;
     std::function<void(int, int, uint8_t*, uint8_t*, uint8_t*, int, int, int)> m_onFrame = Q_NULLPTR;
 };
 

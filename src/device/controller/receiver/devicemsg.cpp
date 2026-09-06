@@ -8,7 +8,7 @@ DeviceMsg::DeviceMsg(QObject *parent) : QObject(parent) {}
 DeviceMsg::~DeviceMsg()
 {
     if (DMT_GET_CLIPBOARD == m_data.type && Q_NULLPTR != m_data.clipboardMsg.text) {
-        delete m_data.clipboardMsg.text;
+        delete [] m_data.clipboardMsg.text;
         m_data.clipboardMsg.text = Q_NULLPTR;
     }
 }
@@ -38,27 +38,28 @@ qint32 DeviceMsg::deserialize(QByteArray &byteArray)
     }
 
     buf.getChar(&c);
-    m_data.type = (DeviceMsgType)c;
-    switch (m_data.type) {
+    const DeviceMsgType type = static_cast<DeviceMsgType>(c);
+    switch (type) {
     case DMT_GET_CLIPBOARD: {
         if (len < 5) {
             ret = 0; // not available
             break;
         }
 
-        m_data.clipboardMsg.text = Q_NULLPTR;
         quint32 clipboardLen = BufferUtil::read32(buf);
-        if (clipboardLen > len - 5) {
+        if (clipboardLen > static_cast<quint32>(len - 5)) {
             ret = 0; // not available
             break;
         }
 
         QByteArray text = buf.read(clipboardLen);
-        m_data.clipboardMsg.text = new char[text.length() + 1];
-        memcpy(m_data.clipboardMsg.text, text.data(), text.length());
-        m_data.clipboardMsg.text[text.length()] = '\0';
+        const auto textLength = text.size();
+        delete [] m_data.clipboardMsg.text;
+        m_data.clipboardMsg.text = new char[static_cast<size_t>(textLength) + 1];
+        memcpy(m_data.clipboardMsg.text, text.data(), static_cast<size_t>(textLength));
+        m_data.clipboardMsg.text[textLength] = '\0';
 
-        ret = 5 + clipboardLen;
+        ret = static_cast<qint32>(5 + clipboardLen);
         break;
     }
     case DMT_ACK_CLIPBOARD:
@@ -84,10 +85,13 @@ qint32 DeviceMsg::deserialize(QByteArray &byteArray)
         break;
     }
     default:
-        qWarning("Unsupported device msg type: %d", (int)m_data.type);
+        qWarning("Unsupported device msg type: %d", static_cast<int>(type));
         ret = -1; // error, the protocol does not expose a generic frame size
     }
 
+    if (ret > 0) {
+        m_data.type = type;
+    }
     buf.close();
     return ret;
 }

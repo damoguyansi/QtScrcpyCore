@@ -21,11 +21,18 @@ qint32 VideoSocket::subThreadRecvData(quint8 *buf, qint32 bufSize)
     Q_ASSERT(QCoreApplication::instance()->thread() != QThread::currentThread());
 
     while (bytesAvailable() < bufSize) {
-        if (!waitForReadyRead(-1)) {
+        if (QThread::currentThread()->isInterruptionRequested()) {
             return 0;
+        }
+        if (!waitForReadyRead(1000)) {
+            if (state() == QAbstractSocket::UnconnectedState) {
+                return 0;
+            }
+            continue;
         }
     }
 
     // recv data
-    return read((char *)buf, bufSize);
+    return static_cast<qint32>(
+            read(reinterpret_cast<char *>(buf), static_cast<qint64>(bufSize)));
 }

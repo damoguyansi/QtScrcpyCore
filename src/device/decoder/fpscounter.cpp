@@ -37,9 +37,8 @@ void FpsCounter::addSkippedFrame()
 void FpsCounter::timerEvent(QTimerEvent *event)
 {
     if (event && m_counterTimer == event->timerId()) {
-        m_curRendered = m_rendered;
-        m_curSkipped = m_skipped;
-        resetCounter();
+        m_curRendered = m_rendered.exchange(0, std::memory_order_relaxed);
+        m_curSkipped = m_skipped.exchange(0, std::memory_order_relaxed);
         emit updateFPS(m_curRendered);
         //qInfo("FPS:%d Discard:%d", m_curRendered, m_skipped);
     }
@@ -61,6 +60,6 @@ void FpsCounter::stopCounterTimer()
 
 void FpsCounter::resetCounter()
 {
-    m_rendered = 0;
-    m_skipped = 0;
+    m_rendered.store(0, std::memory_order_relaxed);
+    m_skipped.store(0, std::memory_order_relaxed);
 }

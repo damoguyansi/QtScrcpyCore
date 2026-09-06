@@ -253,8 +253,6 @@ void Device::initSignals()
 
     if (m_server) {
         connect(m_server, &Server::serverStarted, this, [this](bool success, const QString &deviceName, const QSize &size) {
-            m_serverStartSuccess = success;
-            emit deviceConnected(success, m_params.serial, deviceName, size);
             if (success) {
                 double diff = m_startTimeCount.elapsed() / 1000.0;
                 qInfo() << QString("server start finish in %1s").arg(diff).toStdString().c_str();
@@ -273,7 +271,17 @@ void Device::initSignals()
 
                 // init decoder
                 if (m_decoder) {
-                    m_decoder->open();
+                    success = m_decoder->open();
+                    if (!success) {
+                        qCritical("Could not initialize video decoder");
+                    }
+                }
+
+                if (!success) {
+                    m_serverStartSuccess = false;
+                    emit deviceConnected(false, m_params.serial, deviceName, size);
+                    m_server->stop();
+                    return;
                 }
 
                 // init stream
@@ -319,6 +327,8 @@ void Device::initSignals()
             } else {
                 m_server->stop();
             }
+            m_serverStartSuccess = success;
+            emit deviceConnected(success, m_params.serial, deviceName, size);
         });
         connect(m_server, &Server::serverStoped, this, [this]() {
             disconnectDevice();
@@ -327,11 +337,13 @@ void Device::initSignals()
     }
 
     if (m_stream) {
-        connect(m_stream, &Demuxer::sessionChanged, this, [this](const QSize &size, bool clientResized) {
-            qInfo() << "Video session changed to" << size << "client resized:" << clientResized;
+        connect(m_stream, &Demuxer::sessionChanged, this, [this](const QSize &size, bool) {
             if (m_decoder) {
                 m_decoder->onVideoSessionChanged(size);
             }
+        }, Qt::DirectConnection);
+        connect(m_stream, &Demuxer::sessionChanged, this, [this](const QSize &size, bool clientResized) {
+            qInfo() << "Video session changed to" << size << "client resized:" << clientResized;
             for (const auto& item : m_deviceObservers) {
                 item->onVideoSessionChanged(size, clientResized);
             }
@@ -440,13 +452,14 @@ void Device::disconnectDevice()
     m_server->stop();
     m_server = Q_NULLPTR;
 
-    if (m_stream) {
-        m_stream->stopDecode();
-    }
-
-    // server must stop before decoder, because decoder block main thread
+    // A decoder may be blocked waiting for the GUI to consume a frame. Interrupt
+    // it before joining the demux thread, otherwise shutdown can deadlock.
     if (m_decoder) {
         m_decoder->close();
+    }
+
+    if (m_stream) {
+        m_stream->stopDecode();
     }
 
     if (m_recorder) {

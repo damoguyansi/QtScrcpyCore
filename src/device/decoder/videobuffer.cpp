@@ -1,5 +1,6 @@
 #include "videobuffer.h"
 #include "avframeconvert.h"
+#include <QMutexLocker>
 extern "C"
 {
 #include "libavformat/avformat.h"
@@ -113,14 +114,20 @@ void VideoBuffer::peekRenderedFrame(std::function<void(int width, int height, ui
         return;
     }
 
-    lock();
+    QMutexLocker locker(&m_mutex);
     auto frame = m_renderingframe;
+    if (!frame || frame->width <= 0 || frame->height <= 0 || !frame->data[0]) {
+        return;
+    }
     int width = frame->width;
     int height = frame->height;
-    int linesize = frame->linesize[0];
 
     // create buffer
-    uint8_t* rgbBuffer = new uint8_t[linesize * height * 4];
+    const int bufferSize = av_image_get_buffer_size(AV_PIX_FMT_RGB32, width, height, 4);
+    if (bufferSize <= 0) {
+        return;
+    }
+    uint8_t* rgbBuffer = new uint8_t[static_cast<size_t>(bufferSize)];
     AVFrame *rgbFrame = av_frame_alloc();
     if (!rgbFrame) {
         delete [] rgbBuffer;
@@ -138,18 +145,18 @@ void VideoBuffer::peekRenderedFrame(std::function<void(int width, int height, ui
     ret = convert.init();
     if (!ret) {
         delete [] rgbBuffer;
-        av_free(rgbFrame);
+        av_frame_free(&rgbFrame);
         return;
     }
     ret = convert.convert(frame, rgbFrame);
     if (!ret) {
         delete [] rgbBuffer;
-        av_free(rgbFrame);
+        av_frame_free(&rgbFrame);
         return;
     }
     convert.deInit();
-    av_free(rgbFrame);
-    unLock();
+    av_frame_free(&rgbFrame);
+    locker.unlock();
 
     onFrame(width, height, rgbBuffer);
     delete [] rgbBuffer;
@@ -157,13 +164,9 @@ void VideoBuffer::peekRenderedFrame(std::function<void(int width, int height, ui
 
 void VideoBuffer::interrupt()
 {
-    if (m_renderExpiredFrames) {
-        m_mutex.lock();
-        m_interrupted = true;
-        m_mutex.unlock();
-        // wake up blocking wait
-        m_renderingFrameConsumedCond.wakeOne();
-    }
+    QMutexLocker locker(&m_mutex);
+    m_interrupted = true;
+    m_renderingFrameConsumedCond.wakeAll();
 }
 
 void VideoBuffer::swap()
