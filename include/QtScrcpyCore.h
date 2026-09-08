@@ -94,6 +94,7 @@ public:
     virtual ~IDevice(){}
 
 signals:
+    void clipboardTextReceived(const QString &text);
     void deviceConnected(bool success, const QString& serial, const QString& deviceName, const QSize& size);
     void deviceDisconnected(QString serial);
 

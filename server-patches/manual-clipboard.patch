@@ -1,0 +1,14 @@
+diff --git a/server/src/main/java/com/genymobile/scrcpy/control/Controller.java b/server/src/main/java/com/genymobile/scrcpy/control/Controller.java
+index 55d6e11..97b53d4 100644
+--- a/server/src/main/java/com/genymobile/scrcpy/control/Controller.java
++++ b/server/src/main/java/com/genymobile/scrcpy/control/Controller.java
+@@ -695,7 +695,8 @@ public class Controller implements AsyncProcessor, VirtualDisplayListener {
+         // If clipboard autosync is enabled, then the device clipboard is synchronized to the computer clipboard whenever it changes, in
+         // particular when COPY or CUT are injected, so it should not be synchronized twice. On Android < 7, do not synchronize at all rather than
+         // copying an old clipboard content.
+-        if (!clipboardAutosync) {
++        // Explicit clipboard reads need a reply even when no clipboard change occurred.
++        if (!clipboardAutosync || copyKey == ControlMessage.COPY_KEY_NONE) {
+             String clipboardText = Device.getClipboardText();
+             if (clipboardText != null) {
+                 DeviceMessage msg = DeviceMessage.createClipboard(clipboardText);

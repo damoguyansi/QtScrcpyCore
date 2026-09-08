@@ -19,9 +19,10 @@ void Receiver::recvDeviceMsg(DeviceMsg *deviceMsg)
 
         if (board->text() == text) {
             qDebug("Computer clipboard unchanged");
-            break;
+        } else {
+            board->setText(text);
         }
-        board->setText(text);
+        emit clipboardTextReceived(text);
         break;
     }
     default:

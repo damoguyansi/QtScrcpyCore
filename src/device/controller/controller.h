@@ -63,6 +63,7 @@ public:
     void postTextInput(QString &text);
 
 signals:
+    void clipboardTextReceived(const QString &text);
     void grabCursor(bool grab);
 
 protected:

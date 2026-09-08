@@ -10,6 +10,13 @@
 ControlMsg::ControlMsg(ControlMsgType controlMsgType) : QScrcpyEvent(Control)
 {
     m_data.type = controlMsgType;
+    if (controlMsgType == CMT_GET_CLIPBOARD) {
+        m_data.getClipboard.copyKey = GCCK_NONE;
+    } else if (controlMsgType == CMT_SET_CLIPBOARD) {
+        m_data.setClipboard.sequence = 0;
+        m_data.setClipboard.text = Q_NULLPTR;
+        m_data.setClipboard.paste = false;
+    }
 }
 
 ControlMsg::~ControlMsg()
@@ -81,15 +88,20 @@ void ControlMsg::setGetClipboardMsgData(ControlMsg::GetClipboardCopyKey copyKey)
 
 void ControlMsg::setSetClipboardMsgData(QString &text, bool paste)
 {
+    m_data.setClipboard.paste = paste;
+    m_data.setClipboard.sequence = 0;
     if (text.isEmpty()) {
         m_data.setClipboard.text = Q_NULLPTR;
         return;
     }
-    if (CONTROL_MSG_CLIPBOARD_TEXT_MAX_LENGTH < text.length()) {
-        text = text.left(CONTROL_MSG_CLIPBOARD_TEXT_MAX_LENGTH);
-    }
-
     QByteArray tmp = text.toUtf8();
+    if (tmp.size() > CONTROL_MSG_CLIPBOARD_TEXT_MAX_LENGTH) {
+        int length = CONTROL_MSG_CLIPBOARD_TEXT_MAX_LENGTH;
+        // The wire limit is bytes; never split a UTF-8 character at the boundary.
+        while ((static_cast<unsigned char>(tmp.at(length)) & 0xc0) == 0x80) --length;
+        tmp.truncate(length);
+        text = QString::fromUtf8(tmp);
+    }
     m_data.setClipboard.text = new char[tmp.length() + 1];
     memcpy(m_data.setClipboard.text, tmp.data(), tmp.length());
     m_data.setClipboard.text[tmp.length()] = '\0';

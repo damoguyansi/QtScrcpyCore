@@ -12,6 +12,8 @@ public:
     virtual ~Receiver();
 
     void recvDeviceMsg(DeviceMsg *deviceMsg);
+signals:
+    void clipboardTextReceived(const QString &text);
 };
 
 #endif // RECEIVER_H

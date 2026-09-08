@@ -14,6 +14,7 @@ Controller::Controller(std::function<qint64(const QByteArray&)> sendData, QStrin
 {
     m_receiver = new Receiver(this);
     Q_ASSERT(m_receiver);
+    connect(m_receiver, &Receiver::clipboardTextReceived, this, &Controller::clipboardTextReceived);
 
     updateScript(gameScript);
 }
@@ -222,6 +223,7 @@ void Controller::requestDeviceClipboard()
     if (!controlMsg) {
         return;
     }
+    controlMsg->setGetClipboardMsgData(ControlMsg::GCCK_NONE);
     postControlMsg(controlMsg);
 }
 

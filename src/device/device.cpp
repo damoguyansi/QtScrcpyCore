@@ -77,6 +77,7 @@ Device::Device(DeviceParams params, QObject *parent) : IDevice(parent), m_params
             return m_server->getControlSocket()->write(buffer.data(), buffer.length());
         }, m_params.gameScript, this);
         m_controller->setCameraMode(isCameraMode());
+        connect(m_controller, &Controller::clipboardTextReceived, this, &IDevice::clipboardTextReceived);
     }
 
     m_stream = new Demuxer(this);
