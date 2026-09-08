@@ -331,7 +331,17 @@ void Device::initSignals()
             emit deviceConnected(success, m_params.serial, deviceName, size);
         });
         connect(m_server, &Server::serverStoped, this, [this]() {
+            if (!m_server) {
+                return;
+            }
+            const bool wasStarted = m_serverStartSuccess;
             disconnectDevice();
+            // A shell exit before the socket handshake is a failed connection,
+            // not an established-session disconnect. Release the manager entry
+            // and let callers clear their pending-start state and retry.
+            if (!wasStarted) {
+                emit deviceConnected(false, m_params.serial, QString(), QSize());
+            }
             qDebug() << "server process stop";
         });
     }
