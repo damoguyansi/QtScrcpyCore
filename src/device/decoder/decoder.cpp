@@ -1,5 +1,6 @@
 #include <QDebug>
 #include <QMutexLocker>
+#include <QPointer>
 
 #include "compat.h"
 #include "decoder.h"
@@ -200,8 +201,14 @@ void Decoder::onNewFrame() {
     if (m_onFrame) {
         m_renderInFlight = true;
         AVFrame *f = m_renderFrame;
+        // An observer may tear the device (and this decoder) down synchronously;
+        // touch no member after the callback unless we are still alive.
+        QPointer<Decoder> alive(this);
         m_onFrame(f->width, f->height, f->data[0], f->data[1], f->data[2],
                   f->linesize[0], f->linesize[1], f->linesize[2]);
+        if (!alive) {
+            return;
+        }
         m_renderInFlight = false;
     }
     // Observers copy the planes synchronously (texture upload), so return the
