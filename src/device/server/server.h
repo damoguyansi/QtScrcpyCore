@@ -1,9 +1,12 @@
 #ifndef SERVER_H
 #define SERVER_H
 
+#include <QAbstractSocket>
+#include <QByteArray>
 #include <QObject>
 #include <QPointer>
 #include <QSize>
+#include <QTimer>
 
 #include "../../../include/QtScrcpyCoreDef.h"
 #include "adbprocess.h"
@@ -77,6 +80,11 @@ public:
     VideoSocket *removeVideoSocket();
     QTcpSocket *getControlSocket();
 
+    // Parse the 80-byte scrcpy handshake (64-byte device name + 16-byte video
+    // meta). header[0] must be the first byte of the device name (the forward
+    // mode dummy byte already stripped). Pure; exposed for unit tests.
+    static bool parseDeviceInfo(const QByteArray &header, QString &deviceName, QSize &size);
+
 signals:
     void serverStarted(bool success, const QString &deviceName = "", const QSize &size = QSize());
     void serverStoped();
@@ -96,12 +104,32 @@ private:
     bool execute();
     bool connectTo();
     bool startServerByStep();
-    bool readInfo(VideoSocket *videoSocket, QString &deviceName, QSize &size);
-    void startAcceptTimeoutTimer();
+    void startAcceptTimeoutTimer(int timeoutMs);
     void stopAcceptTimeoutTimer();
     void startConnectTimeoutTimer();
     void stopConnectTimeoutTimer();
     void onConnectTimer();
+
+    // Non-blocking header read: consumes exactly skipBytes + 80 bytes once they
+    // are buffered, never more, so following video bytes stay in the socket.
+    bool tryReadDeviceInfo(QTcpSocket *socket, int skipBytes, QString &deviceName, QSize &size);
+
+    // Forward mode ("adb forward"): one asynchronous attempt at a time, paced
+    // by the 300ms connect timer. Server and Device live on the GUI thread, so
+    // the former waitForConnected/waitForReadyRead loops froze the UI for up to
+    // several seconds per device during batch starts.
+    void startForwardAttempt();
+    void onForwardVideoReadyRead();
+    void onForwardSocketError(QAbstractSocket::SocketError error);
+    void onHandshakeDeadline();
+    void finishForwardAttempt();
+    void failForwardAttempt(bool fatal);
+    void abortPendingAttempt();
+
+    // Reverse mode ("adb reverse"): the device connects to our TcpServer.
+    void startReverseHandshake();
+    void onReverseVideoReadyRead();
+    void tryFinishReverse();
 
 private:
     qsc::AdbProcess m_workProcess;
@@ -109,6 +137,13 @@ private:
     TcpServer m_serverSocket; // only used if !tunnel_forward
     QPointer<VideoSocket> m_videoSocket = Q_NULLPTR;
     QPointer<QTcpSocket> m_controlSocket = Q_NULLPTR;
+    QPointer<VideoSocket> m_pendingVideoSocket = Q_NULLPTR;
+    QPointer<QTcpSocket> m_pendingControlSocket = Q_NULLPTR;
+    QTimer m_attemptDeadline;
+    quint32 m_attemptGeneration = 0;
+    bool m_pendingVideoConnected = false;
+    bool m_pendingControlConnected = false;
+    bool m_reverseInfoReady = false;
     bool m_tunnelEnabled = false;
     bool m_tunnelForward = false; // use "adb forward" instead of "adb reverse"
     int m_acceptTimeoutTimer = 0;

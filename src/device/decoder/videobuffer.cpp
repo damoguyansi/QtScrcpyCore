@@ -5,6 +5,7 @@ extern "C"
 {
 #include "libavformat/avformat.h"
 #include "libavutil/avutil.h"
+#include "libavutil/frame.h"
 #include "libavutil/imgutils.h"
 }
 
@@ -106,6 +107,31 @@ const AVFrame *VideoBuffer::consumeRenderedFrame()
         m_renderingFrameConsumedCond.wakeOne();
     }
     return m_renderingframe;
+}
+
+bool VideoBuffer::takeRenderedFrame(AVFrame *dst)
+{
+    QMutexLocker locker(&m_mutex);
+    if (m_renderingFrameConsumed) {
+        // Nothing new: a previous take already consumed it (a queued newFrame
+        // can still arrive after the frame it announced was consumed).
+        return false;
+    }
+    // Consume first so the decoder thread is always woken in renderExpiredFrames
+    // mode, even if the frame turns out to be unusable or nobody wants it.
+    const AVFrame *src = consumeRenderedFrame();
+    if (!dst) {
+        return false;
+    }
+    av_frame_unref(dst);
+    if (!src || src->width <= 0 || src->height <= 0 || !src->data[0]) {
+        return false;
+    }
+    if (av_frame_ref(dst, src) < 0) {
+        av_frame_unref(dst);
+        return false;
+    }
+    return true;
 }
 
 void VideoBuffer::peekRenderedFrame(std::function<void(int width, int height, uint8_t* dataRGB32)> onFrame)

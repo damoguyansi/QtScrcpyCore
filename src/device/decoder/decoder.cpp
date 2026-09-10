@@ -11,11 +11,17 @@ Decoder::Decoder(std::function<void(int, int, uint8_t*, uint8_t*, uint8_t*, int,
     , m_onFrame(onFrame)
 {
     m_vb->init();
+    // NULL is tolerated: onNewFrame then degrades to consume-only.
+    m_renderFrame = av_frame_alloc();
     connect(this, &Decoder::newFrame, this, &Decoder::onNewFrame, Qt::QueuedConnection);
     connect(m_vb, &VideoBuffer::updateFPS, this, &Decoder::updateFPS);
 }
 
 Decoder::~Decoder() {
+    // Drop the GUI reference before the buffer owner goes away.
+    if (m_renderFrame) {
+        av_frame_free(&m_renderFrame);
+    }
     m_vb->deInit();
     delete m_vb;
 }
@@ -49,6 +55,11 @@ void Decoder::close()
 {
     if (m_vb) {
         m_vb->interrupt();
+    }
+    // Release the pool buffer pinned by the last render so teardown does not
+    // keep decoder memory alive; never touch it while observers still read it.
+    if (m_renderFrame && !m_renderInFlight) {
+        av_frame_unref(m_renderFrame);
     }
 
     QMutexLocker locker(&m_codecMutex);
@@ -165,12 +176,40 @@ void Decoder::pushFrame()
 }
 
 void Decoder::onNewFrame() {
-    if (!m_onFrame) {
+    if (!m_vb) {
+        return;
+    }
+    if (m_renderInFlight) {
+        // m_onFrame re-entered the event loop and another newFrame was delivered
+        // inside it. Never overwrite m_renderFrame while the outer fan-out still
+        // reads its planes; re-run once the outer call finishes.
+        m_renderPending = true;
+        return;
+    }
+    if (!m_renderFrame) {
+        // Consume-only so the decoder never blocks in renderExpiredFrames mode.
+        m_vb->takeRenderedFrame(Q_NULLPTR);
         return;
     }
 
-    m_vb->lock();
-    const AVFrame *frame = m_vb->consumeRenderedFrame();
-    m_onFrame(frame->width, frame->height, frame->data[0], frame->data[1], frame->data[2], frame->linesize[0], frame->linesize[1], frame->linesize[2]);
-    m_vb->unLock();
+    // Take a reference under the lock, then render *outside* it: the GL upload
+    // and any resize in the observers must not stall the decoder thread.
+    if (!m_vb->takeRenderedFrame(m_renderFrame)) {
+        return;
+    }
+    if (m_onFrame) {
+        m_renderInFlight = true;
+        AVFrame *f = m_renderFrame;
+        m_onFrame(f->width, f->height, f->data[0], f->data[1], f->data[2],
+                  f->linesize[0], f->linesize[1], f->linesize[2]);
+        m_renderInFlight = false;
+    }
+    // Observers copy the planes synchronously (texture upload), so return the
+    // pool buffer right away instead of pinning a third frame permanently.
+    av_frame_unref(m_renderFrame);
+
+    if (m_renderPending) {
+        m_renderPending = false;
+        emit newFrame();
+    }
 }

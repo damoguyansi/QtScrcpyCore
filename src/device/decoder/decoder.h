@@ -42,6 +42,12 @@ private:
     bool m_isCodecCtxOpen = false;
     QMutex m_codecMutex;
     std::function<void(int, int, uint8_t*, uint8_t*, uint8_t*, int, int, int)> m_onFrame = Q_NULLPTR;
+    // GUI-thread only. Holds a reference to the frame being rendered so the
+    // observers run outside the VideoBuffer lock (the decoder thread may swap
+    // and decode into the other buffer meanwhile).
+    AVFrame *m_renderFrame = Q_NULLPTR;
+    bool m_renderInFlight = false;
+    bool m_renderPending = false;
 };
 
 #endif // DECODER_H

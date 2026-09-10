@@ -33,8 +33,17 @@ public:
     // mark the rendering frame as consumed and return it
     // MUST be called with m_mutex locked!!!
     // the caller is expected to render the returned frame to some texture before
-    // unlocking m_mutex
+    // unlocking m_mutex (or use takeRenderedFrame, which handles this for you)
     const AVFrame *consumeRenderedFrame();
+
+    // Consume the rendering frame and move a *reference* to it into dst
+    // (av_frame_ref: O(1) for refcounted decoder frames, no pixel copy).
+    // Locks m_mutex internally and releases it before returning, so the caller
+    // can render dst without stalling the decoder thread. The caller owns the
+    // reference and must av_frame_unref(dst) when done.
+    // Returns false when there is no unconsumed/valid frame or av_frame_ref failed
+    // (dst is left unref'd in that case). dst may be null to consume without taking.
+    bool takeRenderedFrame(AVFrame *dst);
 
     void peekRenderedFrame(std::function<void(int width, int height, uint8_t* dataRGB32)> onFrame);
 
